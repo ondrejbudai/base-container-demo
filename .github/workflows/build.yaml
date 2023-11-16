@@ -1,0 +1,37 @@
+name: Build containers
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      image: registry.fedoraproject.org/fedora:latest
+      options: --privileged
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - run: |
+          dnf install -y osbuild-ostree podman buildah
+          osbuild --export commit-archive --output-directory . manifest.json
+          tar xf commit-archive/commit.tar
+          ./encapsulate.sh repo
+          podman tag $(podman pull oci-archive:ostree-container.tar) ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          podman login "${{ env.REGISTRY }}" -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}"
+          podman push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
